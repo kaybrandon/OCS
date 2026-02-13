@@ -1,0 +1,244 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole { FOUNDER GM CFO DEPT_HEAD VIEWER }
+enum CompanyStatus { ACTIVE STABILIZING WATCH UNSTABLE }
+enum WorkflowStatus { DRAFT ACTIVE ARCHIVED }
+enum Cadence { ONCE DAILY WEEKLY MONTHLY }
+enum ProcedureSourceType { DOC_UPLOAD TEXT TRANSCRIPT }
+enum Direction { HIGHER_BETTER LOWER_BETTER }
+enum RockStatus { ON_TRACK OFF_TRACK DONE }
+enum IssueStatus { OPEN RESOLVED }
+enum RiskFlag { GREEN YELLOW RED }
+enum FounderActivityType { APPROVAL ESCALATION MEETING OTHER }
+enum AlertRuleType { MARGIN_DROP MARGIN_FLOOR CASH_RUNWAY DSCR_FLOOR ROCKS_LATE KPIS_MISSING FOUNDER_HOURS_RISING GM_SCORE_DROP TURNOVER_SPIKE }
+enum AlertSeverity { INFO WARN CRITICAL }
+
+model User {
+  id           String           @id @default(cuid())
+  name         String
+  email        String           @unique
+  password_hash String
+  role         UserRole
+  created_at   DateTime         @default(now())
+  roleAssignments RoleAssignment[]
+}
+
+model Company {
+  id            String @id @default(cuid())
+  name          String
+  state         String
+  timezone      String
+  industry      String?
+  created_at    DateTime @default(now())
+  status        CompanyStatus
+  roleAssignments RoleAssignment[]
+  workflows     Workflow[]
+  procedureSources ProcedureSource[]
+  kpiDefinitions KpiDefinition[]
+  kpiEntries    KpiEntry[]
+  rocks         Rock[]
+  issues        Issue[]
+  gmScorecards  GmScorecard[]
+  cultureReviews CultureReview[]
+  founderActivityLogs FounderActivityLog[]
+  financialSnapshots FinancialSnapshot[]
+  alertRules    AlertRule[]
+  alertEvents   AlertEvent[]
+}
+
+model RoleAssignment {
+  id              String @id @default(cuid())
+  company_id      String
+  user_id         String
+  role_in_company UserRole
+  company Company @relation(fields: [company_id], references: [id])
+  user    User    @relation(fields: [user_id], references: [id])
+}
+
+model Workflow {
+  id          String @id @default(cuid())
+  company_id  String
+  title       String
+  description String
+  status      WorkflowStatus
+  created_by  String
+  created_at  DateTime @default(now())
+  company     Company @relation(fields: [company_id], references: [id])
+  steps       WorkflowStep[]
+  sources     ProcedureSource[]
+}
+
+model WorkflowStep {
+  id              String @id @default(cuid())
+  workflow_id     String
+  step_order      Int
+  title           String
+  description     String
+  owner_role      UserRole
+  backup_role     UserRole?
+  expected_output String
+  cadence         Cadence
+  due_days        Int?
+  escalation_role UserRole
+  required        Boolean @default(true)
+  workflow Workflow @relation(fields: [workflow_id], references: [id])
+}
+
+model ProcedureSource {
+  id          String @id @default(cuid())
+  company_id  String
+  workflow_id String?
+  source_type ProcedureSourceType
+  filename    String?
+  raw_text    String
+  created_at  DateTime @default(now())
+  company     Company @relation(fields: [company_id], references: [id])
+  workflow    Workflow? @relation(fields: [workflow_id], references: [id])
+}
+
+model KpiDefinition {
+  id            String @id @default(cuid())
+  company_id     String
+  name          String
+  unit          String
+  target_value  Float?
+  direction     Direction
+  cadence       Cadence
+  company       Company @relation(fields: [company_id], references: [id])
+  entries       KpiEntry[]
+}
+
+model KpiEntry {
+  id               String @id @default(cuid())
+  company_id       String
+  kpi_definition_id String
+  period_start     DateTime
+  period_end       DateTime
+  actual_value     Float
+  created_by       String
+  created_at       DateTime @default(now())
+  company          Company @relation(fields: [company_id], references: [id])
+  kpiDefinition    KpiDefinition @relation(fields: [kpi_definition_id], references: [id])
+}
+
+model Rock {
+  id            String @id @default(cuid())
+  company_id    String
+  owner_user_id String
+  title         String
+  description   String
+  quarter       String
+  status        RockStatus
+  created_at    DateTime @default(now())
+  company       Company @relation(fields: [company_id], references: [id])
+}
+
+model Issue {
+  id          String @id @default(cuid())
+  company_id  String
+  created_by  String
+  title       String
+  description String
+  status      IssueStatus
+  created_at  DateTime @default(now())
+  resolved_at DateTime?
+  company     Company @relation(fields: [company_id], references: [id])
+}
+
+model GmScorecard {
+  id                        String @id @default(cuid())
+  company_id                String
+  period_start              DateTime
+  period_end                DateTime
+  margin_stability_score    Float
+  rock_completion_score     Float
+  turnover_score            Float
+  escalation_score          Float
+  revenue_trend_score       Float
+  overall_score             Float
+  notes                     String?
+  company                   Company @relation(fields: [company_id], references: [id])
+}
+
+model CultureReview {
+  id              String @id @default(cuid())
+  company_id      String
+  reviewer_user_id String
+  review_date     DateTime
+  notes           String
+  company         Company @relation(fields: [company_id], references: [id])
+  personScores    CulturePersonScore[]
+}
+
+model CulturePersonScore {
+  id             String @id @default(cuid())
+  culture_review_id String
+  person_name    String
+  role_title     String
+  gwc_get_it     Int
+  gwc_want_it    Int
+  gwc_capacity   Int
+  humble         Int
+  hungry         Int
+  smart          Int
+  risk_flag      RiskFlag
+  cultureReview  CultureReview @relation(fields: [culture_review_id], references: [id])
+}
+
+model FounderActivityLog {
+  id              String @id @default(cuid())
+  company_id      String
+  founder_user_id String
+  activity_type   FounderActivityType
+  minutes         Int
+  notes           String
+  occurred_at     DateTime
+  company         Company @relation(fields: [company_id], references: [id])
+}
+
+model FinancialSnapshot {
+  id               String @id @default(cuid())
+  company_id       String
+  period_start     DateTime
+  period_end       DateTime
+  revenue          Float
+  gross_margin_pct Float
+  net_margin_pct   Float
+  cash_on_hand     Float
+  dscr             Float?
+  working_cap_days Float?
+  created_by       String
+  created_at       DateTime @default(now())
+  company          Company @relation(fields: [company_id], references: [id])
+}
+
+model AlertRule {
+  id                String @id @default(cuid())
+  company_id        String
+  rule_type         AlertRuleType
+  threshold_numeric Float?
+  threshold_pct     Float?
+  is_enabled        Boolean @default(true)
+  company           Company @relation(fields: [company_id], references: [id])
+  events            AlertEvent[]
+}
+
+model AlertEvent {
+  id              String @id @default(cuid())
+  company_id      String
+  rule_id         String
+  severity        AlertSeverity
+  message         String
+  created_at      DateTime @default(now())
+  acknowledged_by String?
+  acknowledged_at DateTime?
+  company         Company @relation(fields: [company_id], references: [id])
+  rule            AlertRule @relation(fields: [rule_id], references: [id])
+}
